@@ -27,12 +27,14 @@ app.use(cors());
 const bcrypt = require('bcryptjs');
 
 // 加载静态页面
-app.use(express.static(path.join(__dirname, 'public')));
+//app.use(express.static(path.join(__dirname, 'public')));
 
 app.use(express.json());//解析json请求
 app.use(express.urlencoded({ extended: true }));// Body parsers for JSON and forms
-
-app.use(express.static('public'));
+//this is for html
+//“如果用户请求 /、/signup.html、/login.html 或其他静态资源（JS、CSS、图片等），就去 public 文件夹里找这些文件。
+//如果仅仅是/，就去index.html这个页面
+// app.use(express.static('public'));
 
 // 测试连接
 async function testConnection() {
@@ -126,7 +128,7 @@ app.post('/login', async (req, res) => {
     }
 });
 
-//add this route to fix cannot get /
+//add this route to fix cannot get /（Render 会默认向你的服务器发送一个 GET 请求到 / 路由）
 app.get('/', (req, res) => {
     res.send('Welcome to MyBuildProject_2025 API!');
 });
