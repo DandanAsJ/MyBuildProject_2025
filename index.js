@@ -126,6 +126,11 @@ app.post('/login', async (req, res) => {
     }
 });
 
+//add this route to fix cannot get /
+app.get('/', (req, res) => {
+    res.send('Welcome to MyBuildProject_2025 API!');
+});
+
 // 启动服务器
 app.listen(PORT, () => {
     console.log(`Server is running on port:${PORT}`);
