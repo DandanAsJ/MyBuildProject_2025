@@ -6,6 +6,7 @@ const { Sequelize, UniqueConstraintError } = require('sequelize');
 
 const dbConfig = require('./sequelize/config/config.js').development;
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 
 // 创建 Sequelize 实例,连接数据库
 // const sequelize = new Sequelize(dbConfig.url, {
