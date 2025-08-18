@@ -28,7 +28,7 @@ sequelize.sync();//auto migration on deploy
 
 // 导入模型
 const User = require('./sequelize/models/users.js')(sequelize, Sequelize.DataTypes);
-const Password = require('./sequelize/models/passwords.js')(sequelize, Sequelize.DataTypes);
+const Password = require('./sequelize/models/userpassword.js')(sequelize, Sequelize.DataTypes);
 
 
 // 初始化 Express 应用
@@ -197,6 +197,52 @@ app.post('/passwords/save', async (req, res) => {
         res.status(500).json({ message: 'Server error' });
     }
 });
+
+//list all saved passwords
+app.post('/passwords/list', async (req, res, next) => {
+    try {
+        const userId = req.auth.id;
+        const encryptionKey = req.body.encryption_key;
+
+        // 取用户加密密钥
+        const userRecord = await User.findOne({
+            attributes: ['encryption_key'],
+            where: { id: userId }
+        });
+
+        if (!userRecord) {
+            return res.status(403).json({ message: 'User not found' });
+        }
+
+        const matched = await bcrypt.compare(encryptionKey, userRecord.encryption_key);
+        if (!matched) {
+            return res.status(400).json({ message: 'Incorrect encryption key' });
+        }
+
+        // 查询当前用户所有密码
+        let passwords = await Password.findAll({
+            attributes: ['id', 'url', 'username', 'password', 'label'],
+            where: { ownerUserId: userId }
+        });
+
+        // 解密
+        const passwordsArr = passwords.map(p => {
+            return {
+                id: p.id,
+                url: p.url,
+                label: p.label,
+                username: decrypt(p.username, encryptionKey),
+                password: decrypt(p.password, encryptionKey)
+            };
+        });
+
+        return res.status(200).json({ message: 'Success', data: passwordsArr });
+    } catch (err) {
+        console.error(err);
+        return res.status(500).json({ message: 'Server error' });
+    }
+});
+
 
 //add this route to fix cannot get /（Render 会默认向你的服务器发送一个 GET 请求到 / 路由）
 app.get('/', (req, res) => {

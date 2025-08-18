@@ -12,7 +12,7 @@ module.exports = (sequelize, DataTypes) => {
         username: { type: DataTypes.TEXT, allowNull: false },
         password: { type: DataTypes.TEXT, allowNull: false } // 存加密后的字符串
     }, {
-        tableName: 'users_passwords',
+        tableName: 'passwords',
         timestamps: true,
         underscored: false
     });
