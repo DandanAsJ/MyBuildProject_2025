@@ -52,7 +52,7 @@ app.use(express.urlencoded({ extended: true }));// Body parsers for JSON and for
 //如果仅仅是/，就去index.html这个页面
 // app.use(express.static('public'));
 
-console.log('DATABASE_URL:', process.env.DATABASE_URL);
+//console.log('DATABASE_URL:', process.env.DATABASE_URL);
 
 app.use(
     expressjwt({
