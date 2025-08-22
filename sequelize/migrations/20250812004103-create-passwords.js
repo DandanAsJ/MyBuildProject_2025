@@ -31,6 +31,30 @@ module.exports = {
       password: {
         type: Sequelize.STRING
       },
+      sharedByUserId: {
+        type: Sequelize.INTEGER,
+        allowNull: true,
+        references: {
+          model: 'Users',
+          key: 'id'
+        },
+        onUpdate: 'CASCADE',
+        onDelete: 'SET NULL'
+      },
+      weak_encryption: {
+        type: Sequelize.BOOLEAN,
+        defaultValue: false
+      },
+      source_password_id: {
+        type: Sequelize.INTEGER,
+        allowNull: true,
+        references: {
+          model: 'UserPasswords',
+          key: 'id'
+        },
+        onUpdate: 'CASCADE',
+        onDelete: 'SET NULL'
+      },
       createdAt: {
         allowNull: false,
         type: Sequelize.DATE

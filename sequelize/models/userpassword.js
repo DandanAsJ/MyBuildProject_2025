@@ -10,7 +10,10 @@ module.exports = (sequelize, DataTypes) => {
         },
         label: { type: DataTypes.STRING },
         username: { type: DataTypes.TEXT, allowNull: false },
-        password: { type: DataTypes.TEXT, allowNull: false } // 存加密后的字符串
+        password: { type: DataTypes.TEXT, allowNull: false }, // will be encrypted
+        sharedByUserId: DataTypes.INTEGER,
+        weak_encryption: DataTypes.BOOLEAN,
+        source_password_id: DataTypes.INTEGER
     }, {
         tableName: 'passwords',
         timestamps: true,

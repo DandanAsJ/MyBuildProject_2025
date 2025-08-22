@@ -26,7 +26,7 @@ const sequelize = new Sequelize({
 });
 sequelize.sync();//auto migration on deploy
 
-// 导入模型
+// models
 const User = require('./sequelize/models/users.js')(sequelize, Sequelize.DataTypes);
 const Password = require('./sequelize/models/userpassword.js')(sequelize, Sequelize.DataTypes);
 
@@ -39,11 +39,6 @@ const PORT = process.env.PORT || 3000;
 const cors = require('cors');
 app.use(cors());
 
-
-
-
-// 加载静态页面
-//app.use(express.static(path.join(__dirname, 'public')));
 
 app.use(express.json());//解析json请求
 app.use(express.urlencoded({ extended: true }));// Body parsers for JSON and forms
@@ -61,7 +56,7 @@ app.use(
     }).unless({ path: ['/login', '/signup', '/'] })
 );
 
-// 测试连接
+// test database connection
 async function testConnection() {
     try {
         await sequelize.authenticate();
@@ -77,15 +72,6 @@ testConnection();
 const jwt = require('jsonwebtoken');
 const JWT_SECRET = process.env.JWT_SECRET || 'your_secret_key';
 
-// 查询所有 Users 的接口
-// app.get('/users', async (req, res) => {
-//     try {
-//         const users = await User.findAll();
-//         res.json(users);
-//     } catch (error) {
-//         res.status(500).json({ error: 'Failed to fetch users', detail: error.message });
-//     }
-// });
 
 function generateJWT(user) {
     return new Promise((resolve, reject) => {
@@ -204,7 +190,6 @@ app.post('/passwords/list', async (req, res, next) => {
         const userId = req.auth.id;
         const encryptionKey = req.body.encryption_key;
 
-        // 取用户加密密钥
         const userRecord = await User.findOne({
             attributes: ['encryption_key'],
             where: { id: userId }
@@ -219,13 +204,12 @@ app.post('/passwords/list', async (req, res, next) => {
             return res.status(400).json({ message: 'Incorrect encryption key' });
         }
 
-        // 查询当前用户所有密码
         let passwords = await Password.findAll({
             attributes: ['id', 'url', 'username', 'password', 'label'],
             where: { ownerUserId: userId }
         });
 
-        // 解密
+        // decryption
         const passwordsArr = passwords.map(p => {
             return {
                 id: p.id,
@@ -249,7 +233,7 @@ app.get('/', (req, res) => {
     res.send('Welcome to MyBuildProject_2025 API!');
 });
 
-// 启动服务器
+// start the server
 app.listen(PORT, () => {
     console.log(`Server is running on port:${PORT}`);
 });
