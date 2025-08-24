@@ -4,15 +4,10 @@ const express = require('express');
 const { expressjwt } = require('express-jwt');
 const { Sequelize, UniqueConstraintError } = require('sequelize');
 
-const dbConfig = require('./sequelize/config/config.js').development;
+const dbConfig = require('./config/config.js').development;
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 
-// 创建 Sequelize 实例,连接数据库
-// const sequelize = new Sequelize(dbConfig.url, {
-//     dialect: dbConfig.dialect,
-//     dialectOptions: dbConfig.dialectOptions
-// });
 
 const sequelize = new Sequelize({
     database: dbConfig.database,
@@ -22,13 +17,13 @@ const sequelize = new Sequelize({
     port: dbConfig.port,
     dialect: dbConfig.dialect,
     dialectOptions: dbConfig.dialectOptions
-    //logging: console.log // 可选：启用SQL查询日志
+
 });
 sequelize.sync();//auto migration on deploy
 
 // models
-const User = require('./sequelize/models/users.js')(sequelize, Sequelize.DataTypes);
-const Password = require('./sequelize/models/userpassword.js')(sequelize, Sequelize.DataTypes);
+const User = require('./models/users.js')(sequelize, Sequelize.DataTypes);
+const Password = require('./models/userpassword.js')(sequelize, Sequelize.DataTypes);
 
 
 // 初始化 Express 应用
@@ -142,12 +137,16 @@ app.post('/login', async (req, res) => {
 //save to the passwords table
 app.post('/passwords/save', async (req, res) => {
     try {
+
+
         const { label, url, username, password, encryption_key } = req.body;
         const userId = req.auth && req.auth.id;
 
         if (!userId) {
+            console.log('No user ID found in auth');
             return res.status(401).json({ message: 'Not authenticated' });
         }
+
         //find the record according to the userId
         const userRecord = await User.findOne({
             attributes: ['encryption_key'],
@@ -205,25 +204,89 @@ app.post('/passwords/list', async (req, res, next) => {
         }
 
         let passwords = await Password.findAll({
-            attributes: ['id', 'url', 'username', 'password', 'label'],
+            attributes: ['id', 'url', 'username', 'password', 'label', 'weak_encryption'],
             where: { ownerUserId: userId }
         });
 
         // decryption
-        const passwordsArr = passwords.map(p => {
-            return {
-                id: p.id,
-                url: p.url,
-                label: p.label,
-                username: decrypt(p.username, encryptionKey),
-                password: decrypt(p.password, encryptionKey)
-            };
-        });
+        // const passwordsArr = passwords.map(p => {
+        //     return {
+        //         id: p.id,
+        //         url: p.url,
+        //         label: p.label,
+        //         username: decrypt(p.username, encryptionKey),
+        //         password: decrypt(p.password, encryptionKey)
+        //     };
+        // });
+        const passwordsArr = await Promise.all(
+            passwords.map(async (element) => {
+                await upgradeWeakEncryption(element, userRecord, encryptionKey);
+                element.password = decrypt(element.password, encryptionKey);
+                element.username = decrypt(element.username, encryptionKey);
+                return element;
+            })
+        );
 
         return res.status(200).json({ message: 'Success', data: passwordsArr });
     } catch (err) {
         console.error(err);
         return res.status(500).json({ message: 'Server error' });
+    }
+});
+
+app.post('/passwords/share-password', async (req, res, next) => {
+    try {
+        const { password_id, encryption_key, email } = req.body;
+        const userId = req.auth.id;
+
+        const passwordRow = await Password.findOne({
+            attributes: ['label', 'url', 'username', 'password'], where: { id: password_id, ownerUserId: userId }
+        });
+        if (!passwordRow) {
+            res.status(400);
+            return res.json({ message: 'Incorrect password_id' });
+        }
+        const userRecord = await User.findOne({
+            attributes: ['encryption_key'], where: { id: userId }
+        });
+        const matched = await bcrypt.compare(encryption_key, userRecord.encryption_key);
+        if (!matched) {
+            res.status(400);
+            return res.json({ message: 'Incorrect encryption key' });
+        }
+        const shareUserObj = await User.findOne({ attributes: ['id', 'encryption_key'], where: { email } });
+        if (!shareUserObj) {
+            res.status(400);
+            return res.json({ message: 'User with whom you want to share password does not exist' });
+        }
+        const existingSharedPassword = await Password.findOne({
+            attributes: ['id'], where: { source_password_id: password_id, ownerUserId: shareUserObj.id }
+        });
+        if (existingSharedPassword) {
+            res.status(400);
+            return res.json({ message: `This password is already shared with this email user` });
+        }
+        const decryptedUserName = decrypt(passwordRow.username, encryption_key);
+        const encryptedSharedUserName = encrypt(decryptedUserName, shareUserObj.encryption_key);// encrypting with hash of share user's encryption key
+        const decryptedPassword = decrypt(passwordRow.password, encryption_key);
+        const encryptedSharedPassword = encrypt(decryptedPassword, shareUserObj.encryption_key);
+        const newPassword = {
+            ownerUserId: shareUserObj.id,
+            label: passwordRow.label,
+            url: passwordRow.url,
+            username: encryptedSharedUserName,
+            password: encryptedSharedPassword,
+            sharedByUserId: userId,
+            weak_encryption: true,//encrypted with the hash value
+            source_password_id: password_id
+        };
+        await Password.create(newPassword);
+        return res.json({ message: 'Password shared successfully' });
+    } catch (e) {
+        console.error(e);
+        res.status(500);
+        // todo log error in logging library.
+        return res.json({ message: 'An error occurred.' })
     }
 });
 
@@ -255,4 +318,16 @@ function decrypt(encStr, key) {
     let decrypted = decipher.update(encArr[0], 'base64', 'utf-8');
     decrypted += decipher.final('utf-8');
     return decrypted;
+}
+
+//weak_encryption = 1 (it is encrypted with the hash of encryption_key) weak_encryption = 0 (it is encrypted with the actual encryption key)
+async function upgradeWeakEncryption(element, userRecord, encryptionKey) {
+    if (element.weak_encryption) {
+        const decryptedPassword = decrypt(element.password, userRecord.encryption_key);
+        const decryptedUserName = decrypt(element.username, userRecord.encryption_key);
+        element.password = encrypt(decryptedPassword, encryptionKey);
+        element.username = encrypt(decryptedUserName, encryptionKey);
+        element.weak_encryption = false;
+        await element.save();
+    }
 }
